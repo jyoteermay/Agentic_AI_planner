@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: trip-planner
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - api.yaml
+  - ui.yaml
+  - hpa.yaml
+images:
+  - name: trip-planner
+    newTag: dev            # CI changes this one line per release (Step 4)
+images:
+  - name: trip-planner
+    newName: ghcr.io/jyoteermay/ai_trip_planner   # ← add this line
+    newTag: dev                                            # CI replaces this on every release    

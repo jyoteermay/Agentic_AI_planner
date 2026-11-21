@@ -1,0 +1,31 @@
+services:
+  api:
+    build: .
+    image: trip-planner:dev
+    env_file: .env                     # API keys, read at runtime, never baked into the image
+    environment:
+      MODEL_PROVIDER: gemini           # or groq
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    healthcheck:                       # same idea as the Kubernetes readiness probe
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  ui:
+    build: .
+    image: trip-planner:dev
+    command: ["streamlit", "run", "streamlit_app.py",
+              "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    environment:
+      API_URL: http://api:8000         # "api" = the service name above (Docker's internal DNS)
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy     # wait until the API is actually ready
+    restart: unless-stopped

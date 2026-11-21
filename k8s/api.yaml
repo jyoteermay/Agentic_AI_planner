@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-planner-api
+  namespace: trip-planner
+  labels: { app: trip-planner-api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: trip-planner-api }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0     # never drop below 2 ready pods during a deploy
+      maxSurge: 1           # start 1 new pod, wait until ready, then remove an old one
+  template:
+    metadata:
+      labels: { app: trip-planner-api }
+    spec:
+      terminationGracePeriodSeconds: 120   # let in-flight trip plans (up to ~100s) finish on shutdown
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: trip-planner:dev
+          imagePullPolicy: IfNotPresent    # use the locally built image (no registry yet)
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: { name: trip-planner-config }
+            - secretRef:    { name: trip-planner-secrets }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }   # what the scheduler reserves
+            limits:   { memory: 1Gi }                # pod is restarted if it exceeds this
+          securityContext:
+            allowPrivilegeEscalation: false
+          startupProbe:          # gives the app time to build the agent graph on boot
+            httpGet: { path: /, port: 8000 }
+            periodSeconds: 5
+            failureThreshold: 24   # up to 2 minutes
+          readinessProbe:        # only receive traffic when healthy
+            httpGet: { path: /, port: 8000 }
+            periodSeconds: 10
+          livenessProbe:         # restart the container if it hangs
+            httpGet: { path: /, port: 8000 }
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trip-planner-api
+  namespace: trip-planner
+spec:
+  type: ClusterIP          # internal only — not reachable from outside the cluster
+  selector: { app: trip-planner-api }
+  ports:
+    - port: 8000
+      targetPort: 8000

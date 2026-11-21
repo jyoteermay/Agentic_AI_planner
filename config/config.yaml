@@ -1,0 +1,10 @@
+llm:
+  gemini:
+    provider: "google_genai"
+    model_name: "gemini-3.1-flash-lite"  # ~7s for a full trip plan; gemini-3.5-flash was timing out
+    timeout: 90          # seconds per LLM call before giving up
+    max_retries: 2       # retries on 429/503 errors
+    thinking_budget: 0   # 0 disables thinking (fastest); raise e.g. 512 for more careful plans
+  groq:
+    provider: "groq"
+    model_name: "openai/gpt-oss-120b"
