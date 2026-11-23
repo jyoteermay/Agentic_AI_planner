@@ -9,8 +9,8 @@ resources:
   - hpa.yaml
 images:
   - name: trip-planner
-    newTag: dev            # CI changes this one line per release (Step 4)
+    newTag: "f8bcdcfac650c95ddc706c0b5c97c30d14c5c06b"
 images:
   - name: trip-planner
-    newName: ghcr.io/jyoteermay/ai_trip_planner   # ← add this line
-    newTag: dev                                            # CI replaces this on every release    
+    newName: ghcr.io/jyoteermay/agentic_ai_planner
+    newTag: "f8bcdcfac650c95ddc706c0b5c97c30d14c5c06b"
