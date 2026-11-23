@@ -1,0 +1,101 @@
+name: ci-cd
+
+on:
+  pull_request:
+    branches: [main]                 # PRs: test + build only (nothing is deployed)
+  push:
+    branches: [main]                 # main: test + build + push + deploy
+    paths-ignore:
+      - "**.md"                      # README edits don't need a new release
+
+permissions:
+  contents: write                    # to commit the new image tag
+  packages: write                    # to push to GitHub Container Registry
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true           # a newer push cancels an older running pipeline
+
+jobs:
+  # ---------- 1. TEST ----------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Lint (syntax errors and undefined names)
+        run: |
+          pip install ruff
+          ruff check --select E9,F63,F7,F82 .
+
+      - name: Install dependencies
+        run: |
+          grep -v '^-e' requirements.txt > /tmp/requirements.txt
+          pip install -r /tmp/requirements.txt
+
+      - name: Import check
+        run: python -c "import agent.agentic_workflow, tools.place_search_tool, utils.model_loader"
+
+      - name: Unit tests (runs once a tests/ folder exists)
+        run: |
+          if [ -d tests ]; then pip install pytest && pytest -q; else echo "No tests yet"; fi
+
+  # ---------- 2. BUILD + PUSH ----------
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image name (registry names must be lowercase)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@v3      # lets an amd64 runner build arm64 images
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64   # arm64 = your Mac, amd64 = most cloud nodes
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha                 # reuse layers from previous runs
+          cache-to: type=gha,mode=max
+
+  # ---------- 3. RELEASE (update the manifest → Argo CD deploys) ----------
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point kustomization at the new image
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          sed -i "s|^\(\s*newName:\).*|\1 ${IMAGE}|"       k8s/kustomization.yaml
+          sed -i "s|^\(\s*newTag:\).*|\1 \"${GITHUB_SHA}\"|" k8s/kustomization.yaml
+          cat k8s/kustomization.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy: trip-planner ${GITHUB_SHA::7}"
+          git push
