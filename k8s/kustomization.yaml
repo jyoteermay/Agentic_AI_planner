@@ -9,8 +9,8 @@ resources:
   - hpa.yaml
 images:
   - name: trip-planner
-    newTag: "f8bcdcfac650c95ddc706c0b5c97c30d14c5c06b"
+    newTag: "daa6cbe25c31c37ca32c7ef0b58dcd7e68ba13b0"
 images:
   - name: trip-planner
     newName: ghcr.io/jyoteermay/agentic_ai_planner
-    newTag: "f8bcdcfac650c95ddc706c0b5c97c30d14c5c06b"
+    newTag: "daa6cbe25c31c37ca32c7ef0b58dcd7e68ba13b0"
